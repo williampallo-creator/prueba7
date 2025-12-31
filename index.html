@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Gestos en Tiempo Real</title>
+
+<style>
+body {
+  background:#111;
+  color:#fff;
+  font-family:Arial;
+  text-align:center;
+}
+.box {
+  border:1px solid #444;
+  padding:20px;
+  margin:20px auto;
+  width:300px;
+}
+.value {
+  font-size:2em;
+}
+button {
+  padding:10px 20px;
+  font-size:16px;
+  margin-top:10px;
+}
+.led {
+  width:20px;
+  height:20px;
+  border-radius:50%;
+  margin:10px auto;
+  background:gray;
+}
+</style>
+</head>
+
+<body>
+
+<h2>TUVN – Automatización e Instrumentación</h2>
+<p>Proyecto Final – Edge Impulse</p>
+
+<button onclick="connect()">Conectar Bluetooth</button>
+<p id="status">Estado: Desconectado</p>
+
+<div class="box">
+  <h3>Gestos 1 (Bobinado)</h3>
+  <div class="value" id="g1">0.0000</div>
+  <p>Máximo: <span id="g1max">0.0000</span></p>
+</div>
+
+<div class="box">
+  <h3>Gestos 2 (Rodamiento)</h3>
+  <div class="value" id="g2">0.0000</div>
+  <p>Máximo: <span id="g2max">0.0000</span></p>
+</div>
+
+<div class="box">
+  <h3>CONTROL MOTOR</h3>
+  <button onclick="rearme()">REARME</button>
+  <div id="motorLed" class="led"></div>
+  <p id="motorTxt">Motor: OFF</p>
+</div>
+
+<script>
+let characteristic;
+let rxCharacteristic;
+
+let g1max = 0;
+let g2max = 0;
+
+async function connect() {
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: "ESP32_GESTOS" }],
+      optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]
+    });
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(
+      "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+    );
+
+    characteristic = await service.getCharacteristic(
+      "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+    );
+
+    rxCharacteristic = await service.getCharacteristic(
+      "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+    );
+
+    characteristic.startNotifications();
+    characteristic.addEventListener(
+      "characteristicvaluechanged",
+      handleData
+    );
+
+    document.getElementById("status").innerText =
+      "Estado: Conectado";
+  } catch (e) {
+    alert("Error al conectar Bluetooth");
+  }
+}
+
+function handleData(event) {
+  const text = new TextDecoder().decode(event.target.value);
+  const parts = text.split(",");
+
+  let g1 = parseFloat(parts[0].split(":")[1]);
+  let g2 = parseFloat(parts[1].split(":")[1]);
+  let motor = parts[2].split(":")[1];
+
+  document.getElementById("g1").innerText = g1.toFixed(4);
+  document.getElementById("g2").innerText = g2.toFixed(4);
+
+  if (g1 > g1max) {
+    g1max = g1;
+    document.getElementById("g1max").innerText = g1max.toFixed(4);
+  }
+  if (g2 > g2max) {
+    g2max = g2;
+    document.getElementById("g2max").innerText = g2max.toFixed(4);
+  }
+
+  const led = document.getElementById("motorLed");
+  const txt = document.getElementById("motorTxt");
+
+  if (motor === "ON") {
+    led.style.background = "green";
+    txt.innerText = "Motor: ON";
+  } else {
+    led.style.background = "gray";
+    txt.innerText = "Motor: OFF";
+  }
+}
+
+function rearme() {
+  if (!rxCharacteristic) {
+    alert("Primero conecta el Bluetooth");
+    return;
+  }
+  rxCharacteristic.writeValue(
+    new TextEncoder().encode("REARME")
+  );
+}
+</script>
+
+</body>
+</html>
